@@ -422,9 +422,6 @@ export function CatalogoPage() {
                           className="mt-4 flex items-center gap-2 text-xs uppercase tracking-[0.16em] opacity-60 group-hover:opacity-100"
                         >
                           Ver detalle
-                          {product.images.length > 1 && (
-                            <span>({product.images.length} fotos)</span>
-                          )}
                           <ArrowRight className="h-3.5 w-3.5" />
                         </button>
                       )}
@@ -540,7 +537,13 @@ export function CatalogoPage() {
           if (!open) setImageProductId(null);
         }}
       >
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-4xl">
+        <DialogContent
+          className={
+            isAuthenticated
+              ? "max-h-[85vh] overflow-y-auto sm:max-w-4xl"
+              : "max-h-[85vh] overflow-y-auto sm:max-w-4xl md:max-h-[85dvh] md:overflow-hidden"
+          }
+        >
           <DialogHeader>
             <DialogTitle>
               {isAuthenticated
@@ -561,9 +564,9 @@ export function CatalogoPage() {
             if (!isAuthenticated) {
               const selectedImage = product.images[publicImageIndex];
               return (
-                <div className="grid gap-6 md:grid-cols-[1.1fr_0.9fr]">
-                  <div>
-                    <div className="relative flex aspect-square items-center justify-center overflow-hidden rounded-lg bg-muted">
+                <div className="grid gap-6 md:h-[calc(85dvh-10rem)] md:min-h-0 md:grid-cols-[1.1fr_0.9fr]">
+                  <div className="md:flex md:min-h-0 md:flex-col">
+                    <div className="relative flex aspect-square items-center justify-center overflow-hidden rounded-lg bg-muted md:aspect-auto md:min-h-0 md:flex-1">
                       {selectedImage ? (
                         <img
                           src={selectedImage.url}
@@ -606,7 +609,7 @@ export function CatalogoPage() {
                       )}
                     </div>
                     {product.images.length > 1 && (
-                      <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+                      <div className="mt-3 flex gap-2 overflow-x-auto pb-1 md:shrink-0">
                         {product.images.map((image, index) => (
                           <button
                             key={image.id}
@@ -622,7 +625,7 @@ export function CatalogoPage() {
                       </div>
                     )}
                   </div>
-                  <div className="space-y-3">
+                  <div className="space-y-3 md:min-h-0 md:overflow-hidden">
                     <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
                       {product.sku}
                     </p>
@@ -630,7 +633,7 @@ export function CatalogoPage() {
                       {product.precio ? money(product.precio) : "Consultar"}
                     </p>
                     {product.descripcion && (
-                      <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
+                      <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground md:line-clamp-8">
                         {product.descripcion}
                       </p>
                     )}
