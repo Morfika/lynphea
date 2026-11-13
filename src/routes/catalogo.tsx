@@ -1,6 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import {
   ArrowRight,
+  ChevronLeft,
+  ChevronRight,
   GripVertical,
   ImagePlus,
   Instagram,
@@ -53,10 +55,16 @@ export function CatalogoPage() {
   const [pagina, setPagina] = useState(1);
   const [porPagina, setPorPagina] = useState(24);
   const [imageProductId, setImageProductId] = useState<string | null>(null);
+  const [publicImageIndex, setPublicImageIndex] = useState(0);
   const [uploadingProductId, setUploadingProductId] = useState<string | null>(null);
   const [savingImage, setSavingImage] = useState(false);
   const [draggedImageId, setDraggedImageId] = useState<string | null>(null);
   const imageInputRefs = useRef(new Map<string, HTMLInputElement>());
+
+  const openProductGallery = (productId: string) => {
+    setPublicImageIndex(0);
+    setImageProductId(productId);
+  };
 
   const loadCatalog = useCallback(
     async (authenticated?: boolean) => {
@@ -344,7 +352,15 @@ export function CatalogoPage() {
                           <span className="text-xs uppercase tracking-[0.16em]">Sin imagen</span>
                         </div>
                       )}
-                      <span className="absolute left-3 top-3 bg-white/85 px-3 py-1 text-[10px] uppercase tracking-[0.18em]">
+                      {!isAuthenticated && product.images.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => openProductGallery(product.id)}
+                          aria-label={`Ver fotos de ${product.nombre}`}
+                          className="absolute inset-0 z-10 cursor-zoom-in focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-ring"
+                        />
+                      )}
+                      <span className="pointer-events-none absolute left-3 top-3 z-20 bg-white/85 px-3 py-1 text-[10px] uppercase tracking-[0.18em]">
                         {product.linea === "LYNPHEA PRO" ? "Pro" : "Daily"}
                       </span>
                       {isAuthenticated && (
@@ -400,8 +416,16 @@ export function CatalogoPage() {
                         </p>
                       </div>
                       {!isAuthenticated && (
-                        <button className="mt-4 flex items-center gap-2 text-xs uppercase tracking-[0.16em] opacity-60 group-hover:opacity-100">
-                          Ver detalle <ArrowRight className="h-3.5 w-3.5" />
+                        <button
+                          type="button"
+                          onClick={() => openProductGallery(product.id)}
+                          className="mt-4 flex items-center gap-2 text-xs uppercase tracking-[0.16em] opacity-60 group-hover:opacity-100"
+                        >
+                          Ver detalle
+                          {product.images.length > 1 && (
+                            <span>({product.images.length} fotos)</span>
+                          )}
+                          <ArrowRight className="h-3.5 w-3.5" />
                         </button>
                       )}
                     </div>
@@ -516,17 +540,104 @@ export function CatalogoPage() {
           if (!open) setImageProductId(null);
         }}
       >
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-4xl">
           <DialogHeader>
-            <DialogTitle>Imágenes del producto</DialogTitle>
+            <DialogTitle>
+              {isAuthenticated
+                ? "Imágenes del producto"
+                : (catalog.find((item) => item.id === imageProductId)?.nombre ??
+                  "Detalle del producto")}
+            </DialogTitle>
             <DialogDescription>
-              Arrastra las imágenes para cambiar el orden y selecciona cuál será la portada.
+              {isAuthenticated
+                ? "Arrastra las imágenes para cambiar el orden y selecciona cuál será la portada."
+                : "Explora todas las imágenes de este producto."}
             </DialogDescription>
           </DialogHeader>
           {(() => {
             const product = catalog.find((item) => item.id === imageProductId);
             if (!product)
               return <p className="text-sm text-muted-foreground">Producto no encontrado.</p>;
+            if (!isAuthenticated) {
+              const selectedImage = product.images[publicImageIndex];
+              return (
+                <div className="grid gap-6 md:grid-cols-[1.1fr_0.9fr]">
+                  <div>
+                    <div className="relative flex aspect-square items-center justify-center overflow-hidden rounded-lg bg-muted">
+                      {selectedImage ? (
+                        <img
+                          src={selectedImage.url}
+                          alt={`${product.nombre}, foto ${publicImageIndex + 1}`}
+                          className="h-full w-full object-contain"
+                        />
+                      ) : (
+                        <p className="text-sm text-muted-foreground">
+                          Este producto aún no tiene imágenes.
+                        </p>
+                      )}
+                      {product.images.length > 1 && (
+                        <>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="icon"
+                            aria-label="Ver foto anterior"
+                            disabled={publicImageIndex === 0}
+                            onClick={() => setPublicImageIndex((index) => index - 1)}
+                            className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full shadow"
+                          >
+                            <ChevronLeft />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="icon"
+                            aria-label="Ver foto siguiente"
+                            disabled={publicImageIndex === product.images.length - 1}
+                            onClick={() => setPublicImageIndex((index) => index + 1)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full shadow"
+                          >
+                            <ChevronRight />
+                          </Button>
+                          <span className="absolute bottom-3 right-3 rounded bg-background/85 px-2 py-1 text-xs">
+                            {publicImageIndex + 1} / {product.images.length}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                    {product.images.length > 1 && (
+                      <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+                        {product.images.map((image, index) => (
+                          <button
+                            key={image.id}
+                            type="button"
+                            onClick={() => setPublicImageIndex(index)}
+                            aria-label={`Ver foto ${index + 1} de ${product.nombre}`}
+                            aria-pressed={index === publicImageIndex}
+                            className={`h-16 w-16 shrink-0 overflow-hidden rounded border-2 ${index === publicImageIndex ? "border-primary" : "border-transparent opacity-70 hover:opacity-100"}`}
+                          >
+                            <img src={image.url} alt="" className="h-full w-full object-cover" />
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-3">
+                    <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                      {product.sku}
+                    </p>
+                    <p className="text-lg font-medium">
+                      {product.precio ? money(product.precio) : "Consultar"}
+                    </p>
+                    {product.descripcion && (
+                      <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
+                        {product.descripcion}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              );
+            }
             if (product.images.length === 0)
               return (
                 <p className="py-8 text-center text-sm text-muted-foreground">
