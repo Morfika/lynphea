@@ -117,6 +117,27 @@
   }
 }
 
+.product-gallery-thumbnails {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-color: oklch(0.82 0.01 20) transparent;
+  scrollbar-width: thin;
+}
+
+.product-gallery-thumbnails::-webkit-scrollbar {
+  height: 4px;
+}
+
+.product-gallery-thumbnails::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  background-color: oklch(0.82 0.01 20);
+}
+
+.product-gallery-thumbnails::-webkit-scrollbar-track {
+  background-color: transparent;
+}
+
 @utility label-caps {
   font-size: 0.6875rem;
   letter-spacing: 0.18em;

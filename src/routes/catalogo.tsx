@@ -564,8 +564,8 @@ export function CatalogoPage() {
             if (!isAuthenticated) {
               const selectedImage = product.images[publicImageIndex];
               return (
-                <div className="grid gap-6 md:h-[calc(85dvh-10rem)] md:min-h-0 md:grid-cols-[1.1fr_0.9fr]">
-                  <div className="md:flex md:min-h-0 md:flex-col">
+                <div className="grid min-w-0 gap-6 md:h-[calc(85dvh-10rem)] md:min-h-0 md:grid-cols-[1.1fr_0.9fr]">
+                  <div className="min-w-0 md:flex md:min-h-0 md:flex-col">
                     <div className="relative flex aspect-square items-center justify-center overflow-hidden rounded-lg bg-muted md:aspect-auto md:min-h-0 md:flex-1">
                       {selectedImage ? (
                         <img
@@ -609,7 +609,7 @@ export function CatalogoPage() {
                       )}
                     </div>
                     {product.images.length > 1 && (
-                      <div className="mt-3 flex gap-2 overflow-x-auto pb-1 md:shrink-0">
+                      <div className="product-gallery-thumbnails mt-3 flex w-full gap-2 pb-1 md:shrink-0">
                         {product.images.map((image, index) => (
                           <button
                             key={image.id}
