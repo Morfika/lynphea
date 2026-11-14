@@ -44,6 +44,50 @@ function getLinePalette(linea: PublicCatalogProduct["linea"]): {
 }
 
 const photoCache = new Map<string, Promise<ImageBitmap>>();
+const fontCache = new Map<string, Promise<string>>();
+
+const pdfFonts = [
+  { file: "CormorantGaramond-Regular.ttf", style: "normal" },
+  { file: "CormorantGaramond-Italic.ttf", style: "italic" },
+  { file: "CormorantGaramond-SemiBold.ttf", style: "bold" },
+  { file: "CormorantGaramond-SemiBoldItalic.ttf", style: "bolditalic" },
+] as const;
+
+function arrayBufferToBase64(buffer: ArrayBuffer) {
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+  }
+  return btoa(binary);
+}
+
+async function loadPdfFont(file: string) {
+  let loading = fontCache.get(file);
+  if (!loading) {
+    loading = (async () => {
+      const response = await fetch(`${import.meta.env.BASE_URL}fonts/${file}`);
+      if (!response.ok) {
+        throw new Error(`No se pudo cargar la tipografía Cormorant Garamond (${response.status}).`);
+      }
+      return arrayBufferToBase64(await response.arrayBuffer());
+    })();
+    fontCache.set(file, loading);
+    void loading.catch(() => fontCache.delete(file));
+  }
+  return loading;
+}
+
+async function registerPdfFonts(pdf: jsPDF) {
+  const fontData = await Promise.all(pdfFonts.map(({ file }) => loadPdfFont(file)));
+  pdfFonts.forEach(({ file, style }, index) => {
+    const data = fontData[index];
+    if (!data) throw new Error(`No se pudo preparar la tipografía ${file}.`);
+    pdf.addFileToVFS(file, data);
+    pdf.addFont(file, "CormorantGaramond", style);
+  });
+}
 
 function getProductPhotos(product: PublicCatalogProduct) {
   const cover = product.images.find((image) => image.is_cover) ?? product.images[0];
@@ -182,22 +226,22 @@ function addCoverPage(pdf: jsPDF, photo: string | null, productCount: number) {
   pdf.rect(9, 9, width - 18, height - 18, "S");
 
   pdf.setTextColor(...colors.rose);
-  pdf.setFont("helvetica", "bold");
+  pdf.setFont("CormorantGaramond", "bold");
   pdf.setFontSize(8);
   pdf.text("MAKEUP  /  BEAUTY", 19, 28);
 
   pdf.setTextColor(...colors.ink);
-  pdf.setFont("times", "bolditalic");
+  pdf.setFont("CormorantGaramond", "bolditalic");
   pdf.setFontSize(34);
   pdf.text("LYNPHEA", 18, 54);
   pdf.setDrawColor(...colors.rose);
   pdf.setLineWidth(1.1);
   pdf.line(19, 62, 70, 62);
 
-  pdf.setFont("times", "italic");
+  pdf.setFont("CormorantGaramond", "italic");
   pdf.setFontSize(46);
   pdf.text("CATÁLOGO", 18, 91);
-  pdf.setFont("helvetica", "normal");
+  pdf.setFont("CormorantGaramond", "normal");
   pdf.setFontSize(9);
   pdf.setTextColor(...colors.muted);
   pdf.text("UNA SELECCIÓN PARA DESCUBRIR", 20, 101);
@@ -211,18 +255,18 @@ function addCoverPage(pdf: jsPDF, photo: string | null, productCount: number) {
   }
 
   pdf.setTextColor(...colors.ink);
-  pdf.setFont("times", "italic");
+  pdf.setFont("CormorantGaramond", "italic");
   pdf.setFontSize(16);
   pdf.text("Tu belleza, a tu manera.", 19, 253);
   pdf.setDrawColor(...colors.border);
   pdf.setLineWidth(0.35);
   pdf.line(19, 263, width - 19, 263);
 
-  pdf.setFont("helvetica", "bold");
+  pdf.setFont("CormorantGaramond", "bold");
   pdf.setFontSize(8);
   pdf.setTextColor(...colors.rose);
   pdf.text("COLECCIÓN DE PRODUCTOS", 19, 275);
-  pdf.setFont("helvetica", "normal");
+  pdf.setFont("CormorantGaramond", "normal");
   pdf.setTextColor(...colors.muted);
   pdf.text(`${productCount} PRODUCTOS  ·  ${new Date().getFullYear()}`, width - 19, 275, {
     align: "right",
@@ -241,11 +285,11 @@ function drawPageHeader(
   pdf.setFillColor(...paper);
   pdf.rect(0, 0, width, height, "F");
   pdf.setTextColor(...ink);
-  pdf.setFont("times", "bolditalic");
+  pdf.setFont("CormorantGaramond", "bolditalic");
   pdf.setFontSize(19);
   pdf.text("LYNPHEA", 15, 17);
   pdf.setTextColor(...accent);
-  pdf.setFont("times", "italic");
+  pdf.setFont("CormorantGaramond", "italic");
   pdf.setFontSize(11);
   pdf.text(linea === "LYNPHEA DAILY" ? "LYNPHEA DAILY" : "LYNPHEA PRO", width - 15, 16, {
     align: "right",
@@ -288,7 +332,7 @@ function drawProduct(pdf: jsPDF, product: PublicCatalogProduct, photos: PdfPhoto
   const detailLeft = photos[0]?.data ? left + 82 : left + 8;
   const detailWidth = cardWidth - (photos[0]?.data ? 91 : 16);
   pdf.setTextColor(...accent);
-  pdf.setFont("times", "italic");
+  pdf.setFont("CormorantGaramond", "italic");
   pdf.setFontSize(10);
   pdf.text(
     product.linea === "LYNPHEA DAILY" ? "LYNPHEA DAILY" : "LYNPHEA PRO",
@@ -297,7 +341,7 @@ function drawProduct(pdf: jsPDF, product: PublicCatalogProduct, photos: PdfPhoto
   );
 
   pdf.setTextColor(...ink);
-  pdf.setFont("times", "bolditalic");
+  pdf.setFont("CormorantGaramond", "bolditalic");
   pdf.setFontSize(19);
   const wrappedTitle = pdf.splitTextToSize(product.nombre.toUpperCase(), detailWidth);
   const titleLines = (Array.isArray(wrappedTitle) ? wrappedTitle : [wrappedTitle]).slice(0, 2);
@@ -328,11 +372,11 @@ function drawProduct(pdf: jsPDF, product: PublicCatalogProduct, photos: PdfPhoto
   pdf.setLineWidth(0.25);
   pdf.line(detailLeft, priceTop - 4, left + cardWidth - 7, priceTop - 4);
   pdf.setTextColor(...colors.muted);
-  pdf.setFont("times", "italic");
+  pdf.setFont("CormorantGaramond", "italic");
   pdf.setFontSize(10);
   pdf.text("Precio de venta", detailLeft, priceTop + 3);
   pdf.setTextColor(...accent);
-  pdf.setFont("times", "bolditalic");
+  pdf.setFont("CormorantGaramond", "bolditalic");
   pdf.setFontSize(20);
   pdf.text(formatPrice(product.precio), left + cardWidth - 7, priceTop + 5, { align: "right" });
 }
@@ -355,6 +399,10 @@ export async function downloadPublicCatalogPdf(
     subject: "Catálogo de productos LYNPHEA",
     author: "LYNPHEA",
   });
+
+  onProgress({ percent: 12, message: "Cargando Cormorant Garamond…" });
+  await registerPdfFonts(pdf);
+  onProgress({ percent: 18, message: "Tipografía editorial lista. Componiendo portada…" });
 
   const firstProduct = dailyProducts[0] ?? proProducts[0];
   const firstCover = firstProduct ? getProductPhotos(firstProduct)[0] : undefined;
@@ -389,7 +437,7 @@ export async function downloadPublicCatalogPdf(
       });
       processedProducts += pageProducts.length;
       onProgress({
-        percent: Math.min(96, 10 + Math.round((processedProducts / products.length) * 84)),
+        percent: Math.min(94, 18 + Math.round((processedProducts / products.length) * 76)),
         message: `Diseñando ${section.linea === "LYNPHEA DAILY" ? "DAILY" : "PRO"} · página ${Math.floor(index / 2) + 1} de ${sectionPageCount}`,
       });
       clearPhotoCache();
