@@ -4,9 +4,17 @@ import { fetchIndexCatalog, type PublicCatalogProduct } from "@/lib/supabase-dat
 type PdfPhoto = {
   data: string | null;
   expected: boolean;
+  width: number;
+  height: number;
 };
 
 type Rgb = [number, number, number];
+
+type PhotoData = {
+  data: string;
+  width: number;
+  height: number;
+};
 
 export type CatalogPdfProgress = {
   percent: number;
@@ -14,15 +22,14 @@ export type CatalogPdfProgress = {
 };
 
 const colors = {
-  paper: [248, 244, 240] as const,
-  ink: [53, 42, 44] as const,
-  muted: [130, 111, 111] as const,
-  rose: [172, 102, 113] as const,
-  blush: [239, 224, 221] as const,
-  border: [231, 221, 218] as const,
+  paper: [249, 247, 242] as const,
+  ink: [39, 31, 33] as const,
+  muted: [112, 101, 100] as const,
+  rose: [105, 39, 58] as const,
+  blush: [232, 223, 212] as const,
+  border: [220, 213, 203] as const,
   white: [255, 255, 255] as const,
-  photo: [244, 237, 233] as const,
-  gold: [181, 151, 111] as const,
+  gold: [190, 160, 111] as const,
 };
 
 function getLinePalette(linea: PublicCatalogProduct["linea"]): {
@@ -33,13 +40,13 @@ function getLinePalette(linea: PublicCatalogProduct["linea"]): {
   return linea === "LYNPHEA PRO"
     ? {
         ink: [48, 36, 30],
-        accent: [127, 91, 67],
-        paper: [240, 232, 223],
+        accent: [111, 78, 51],
+        paper: [239, 232, 218],
       }
     : {
-        ink: [53, 42, 44],
-        accent: [172, 102, 113],
-        paper: [248, 244, 240],
+        ink: [39, 31, 33],
+        accent: [105, 39, 58],
+        paper: [249, 247, 242],
       };
 }
 
@@ -51,6 +58,8 @@ const pdfFonts = [
   { file: "CormorantGaramond-Italic.ttf", style: "italic" },
   { file: "CormorantGaramond-SemiBold.ttf", style: "bold" },
   { file: "CormorantGaramond-SemiBoldItalic.ttf", style: "bolditalic" },
+  { file: "Jost-Regular.ttf", style: "normal" },
+  { file: "Jost-SemiBold.ttf", style: "bold" },
 ] as const;
 
 function arrayBufferToBase64(buffer: ArrayBuffer) {
@@ -69,7 +78,7 @@ async function loadPdfFont(file: string) {
     loading = (async () => {
       const response = await fetch(`${import.meta.env.BASE_URL}fonts/${file}`);
       if (!response.ok) {
-        throw new Error(`No se pudo cargar la tipografía Cormorant Garamond (${response.status}).`);
+        throw new Error(`No se pudo cargar la tipografía del catálogo (${response.status}).`);
       }
       return arrayBufferToBase64(await response.arrayBuffer());
     })();
@@ -85,7 +94,7 @@ async function registerPdfFonts(pdf: jsPDF) {
     const data = fontData[index];
     if (!data) throw new Error(`No se pudo preparar la tipografía ${file}.`);
     pdf.addFileToVFS(file, data);
-    pdf.addFont(file, "CormorantGaramond", style);
+    pdf.addFont(file, file.startsWith("Jost-") ? "Jost" : "CormorantGaramond", style);
   });
 }
 
@@ -95,7 +104,7 @@ function getProductPhotos(product: PublicCatalogProduct) {
   return [cover, ...product.images.filter((image) => image.id !== cover.id).slice(0, 3)];
 }
 
-async function fetchPhoto(url: string, aspectRatio: number) {
+async function fetchPhoto(url: string): Promise<PhotoData> {
   let loading = photoCache.get(url);
   if (!loading) {
     loading = (async () => {
@@ -108,36 +117,18 @@ async function fetchPhoto(url: string, aspectRatio: number) {
   }
 
   const bitmap = await loading;
-  const sourceRatio = bitmap.width / bitmap.height;
-  let sourceX = 0;
-  let sourceY = 0;
-  let sourceWidth = bitmap.width;
-  let sourceHeight = bitmap.height;
-  if (sourceRatio > aspectRatio) {
-    sourceWidth = bitmap.height * aspectRatio;
-    sourceX = (bitmap.width - sourceWidth) / 2;
-  } else {
-    sourceHeight = bitmap.width / aspectRatio;
-    sourceY = (bitmap.height - sourceHeight) / 2;
-  }
-
   const canvas = document.createElement("canvas");
-  canvas.width = 700;
-  canvas.height = Math.round(canvas.width / aspectRatio);
+  const scale = Math.min(900 / bitmap.width, 1200 / bitmap.height, 1);
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
   const context = canvas.getContext("2d");
   if (!context) throw new Error("No fue posible preparar una imagen para el catálogo.");
-  context.drawImage(
-    bitmap,
-    sourceX,
-    sourceY,
-    sourceWidth,
-    sourceHeight,
-    0,
-    0,
-    canvas.width,
-    canvas.height,
-  );
-  return canvas.toDataURL("image/jpeg", 0.78);
+  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  return {
+    data: canvas.toDataURL("image/jpeg", 0.8),
+    width: canvas.width,
+    height: canvas.height,
+  };
 }
 
 async function loadProductPhotos(product: PublicCatalogProduct): Promise<PdfPhoto[]> {
@@ -145,8 +136,7 @@ async function loadProductPhotos(product: PublicCatalogProduct): Promise<PdfPhot
   const loaded = await Promise.all(
     images.map(async (image) => {
       try {
-        const aspectRatio = image === images[0] ? 0.75 : 0.7;
-        return await fetchPhoto(image.url, aspectRatio);
+        return await fetchPhoto(image.url);
       } catch (error) {
         console.error(`No se pudo cargar una imagen de "${product.nombre}" para el PDF:`, error);
         return null;
@@ -154,8 +144,10 @@ async function loadProductPhotos(product: PublicCatalogProduct): Promise<PdfPhot
     }),
   );
   return Array.from({ length: 4 }, (_, index) => ({
-    data: loaded[index] ?? null,
+    data: loaded[index]?.data ?? null,
     expected: index < images.length,
+    width: loaded[index]?.width ?? 0,
+    height: loaded[index]?.height ?? 0,
   }));
 }
 
@@ -170,11 +162,28 @@ function drawPhoto(
   y: number,
   width: number,
   height: number,
+  imageWidth: number,
+  imageHeight: number,
 ) {
   if (!data) return;
   pdf.setFillColor(...colors.white);
   pdf.roundedRect(x, y, width, height, 1.5, 1.5, "F");
-  pdf.addImage(data, "JPEG", x + 0.5, y + 0.5, width - 1, height - 1);
+  pdf.setDrawColor(...colors.border);
+  pdf.setLineWidth(0.2);
+  pdf.roundedRect(x, y, width, height, 1.5, 1.5, "S");
+  const innerWidth = width - 1.5;
+  const innerHeight = height - 1.5;
+  const scale = Math.min(innerWidth / imageWidth, innerHeight / imageHeight);
+  const renderedWidth = imageWidth * scale;
+  const renderedHeight = imageHeight * scale;
+  pdf.addImage(
+    data,
+    "JPEG",
+    x + (width - renderedWidth) / 2,
+    y + (height - renderedHeight) / 2,
+    renderedWidth,
+    renderedHeight,
+  );
 }
 
 function clearPhotoCache() {
@@ -208,67 +217,63 @@ async function loadCatalog(onProgress: (progress: CatalogPdfProgress) => void) {
   return products;
 }
 
-function addCoverPage(pdf: jsPDF, photo: string | null, productCount: number) {
+function addCoverPage(pdf: jsPDF, photo: PhotoData | null, productCount: number) {
   const width = pdf.internal.pageSize.getWidth();
   const height = pdf.internal.pageSize.getHeight();
-  pdf.setFillColor(...colors.paper);
+  pdf.setFillColor(250, 248, 243);
   pdf.rect(0, 0, width, height, "F");
 
-  pdf.setFillColor(...colors.blush);
-  pdf.circle(183, 89, 61, "F");
   pdf.setFillColor(...colors.rose);
-  pdf.circle(191, 94, 43, "F");
+  pdf.rect(0, 0, width, 105, "F");
   pdf.setFillColor(...colors.gold);
-  pdf.circle(177, 108, 25, "F");
+  pdf.rect(17, 18, 0.8, 67, "F");
 
-  pdf.setDrawColor(...colors.border);
-  pdf.setLineWidth(0.35);
-  pdf.rect(9, 9, width - 18, height - 18, "S");
-
-  pdf.setTextColor(...colors.rose);
-  pdf.setFont("CormorantGaramond", "bold");
-  pdf.setFontSize(8);
-  pdf.text("MAKEUP  /  BEAUTY", 19, 28);
-
-  pdf.setTextColor(...colors.ink);
-  pdf.setFont("CormorantGaramond", "bolditalic");
-  pdf.setFontSize(34);
-  pdf.text("LYNPHEA", 18, 54);
-  pdf.setDrawColor(...colors.rose);
-  pdf.setLineWidth(1.1);
-  pdf.line(19, 62, 70, 62);
-
-  pdf.setFont("CormorantGaramond", "italic");
-  pdf.setFontSize(46);
-  pdf.text("CATÁLOGO", 18, 91);
-  pdf.setFont("CormorantGaramond", "normal");
+  pdf.setTextColor(243, 224, 204);
+  pdf.setFont("Jost", "normal");
   pdf.setFontSize(9);
-  pdf.setTextColor(...colors.muted);
-  pdf.text("UNA SELECCIÓN PARA DESCUBRIR", 20, 101);
+  pdf.setCharSpace(2);
+  pdf.text("MAKEUP  /  BEAUTY", 24, 29);
+  pdf.setCharSpace(0);
 
-  if (photo) {
-    pdf.setFillColor(...colors.white);
-    pdf.roundedRect(19, 121, 172, 113, 3, 3, "F");
-    pdf.setFillColor(...colors.rose);
-    pdf.rect(19, 121, 3, 113, "F");
-    drawPhoto(pdf, photo, 26, 128, 158, 99);
-  }
+  pdf.setTextColor(255, 249, 242);
+  pdf.setFont("Jost", "bold");
+  pdf.setFontSize(36);
+  pdf.text("LYNPHEA", 23, 55);
+  pdf.setTextColor(243, 224, 204);
+  pdf.setFont("CormorantGaramond", "italic");
+  pdf.setFontSize(26);
+  pdf.text("Belleza que habla de ti", 24, 73);
+  pdf.setDrawColor(...colors.gold);
+  pdf.setLineWidth(0.5);
+  pdf.line(24, 82, 79, 82);
 
   pdf.setTextColor(...colors.ink);
   pdf.setFont("CormorantGaramond", "italic");
-  pdf.setFontSize(16);
-  pdf.text("Tu belleza, a tu manera.", 19, 253);
-  pdf.setDrawColor(...colors.border);
-  pdf.setLineWidth(0.35);
-  pdf.line(19, 263, width - 19, 263);
-
-  pdf.setFont("CormorantGaramond", "bold");
-  pdf.setFontSize(8);
+  pdf.setFontSize(43);
+  pdf.text("Tu belleza,", 23, 128);
   pdf.setTextColor(...colors.rose);
-  pdf.text("COLECCIÓN DE PRODUCTOS", 19, 275);
-  pdf.setFont("CormorantGaramond", "normal");
+  pdf.setFont("CormorantGaramond", "bolditalic");
+  pdf.setFontSize(48);
+  pdf.text("a tu manera.", 23, 148);
   pdf.setTextColor(...colors.muted);
-  pdf.text(`${productCount} PRODUCTOS  ·  ${new Date().getFullYear()}`, width - 19, 275, {
+  pdf.setFont("Jost", "normal");
+  pdf.setFontSize(10);
+  pdf.text("Una selección para descubrir y disfrutar.", 25, 160);
+
+  if (photo) drawPhoto(pdf, photo.data, 112, 114, 76, 134, photo.width, photo.height);
+
+  pdf.setDrawColor(...colors.gold);
+  pdf.setLineWidth(0.45);
+  pdf.line(23, 270, width - 23, 270);
+  pdf.setTextColor(...colors.rose);
+  pdf.setFont("Jost", "bold");
+  pdf.setFontSize(8);
+  pdf.setCharSpace(1);
+  pdf.text("COLECCIÓN DE PRODUCTOS", 23, 281);
+  pdf.setCharSpace(0);
+  pdf.setFont("Jost", "normal");
+  pdf.setTextColor(...colors.muted);
+  pdf.text(`${productCount} productos  ·  ${new Date().getFullYear()}`, width - 23, 281, {
     align: "right",
   });
 }
@@ -285,19 +290,20 @@ function drawPageHeader(
   pdf.setFillColor(...paper);
   pdf.rect(0, 0, width, height, "F");
   pdf.setTextColor(...ink);
-  pdf.setFont("CormorantGaramond", "bolditalic");
-  pdf.setFontSize(19);
+  pdf.setFont("Jost", "bold");
+  pdf.setFontSize(16);
   pdf.text("LYNPHEA", 15, 17);
   pdf.setTextColor(...accent);
   pdf.setFont("CormorantGaramond", "italic");
-  pdf.setFontSize(11);
+  pdf.setFontSize(14);
   pdf.text(linea === "LYNPHEA DAILY" ? "LYNPHEA DAILY" : "LYNPHEA PRO", width - 15, 16, {
     align: "right",
   });
   pdf.setDrawColor(...accent);
-  pdf.setLineWidth(0.6);
+  pdf.setLineWidth(0.7);
   pdf.line(15, 23, width - 15, 23);
   pdf.setTextColor(...colors.muted);
+  pdf.setFont("Jost", "normal");
   pdf.setFontSize(7);
   pdf.text(`COLECCIÓN  /  ${new Date().getFullYear()}`, 15, 27);
   pdf.text(
@@ -306,10 +312,11 @@ function drawPageHeader(
     27,
     { align: "right" },
   );
-  pdf.setDrawColor(...colors.border);
-  pdf.setLineWidth(0.35);
+  pdf.setDrawColor(...accent);
+  pdf.setLineWidth(0.45);
   pdf.line(15, 280, width - 15, 280);
-  pdf.setFontSize(6.5);
+  pdf.setFont("Jost", "normal");
+  pdf.setFontSize(7);
   pdf.text("LYNPHEA  ·  MAKEUP & BEAUTY", 15, 286);
   pdf.text("PRECIOS DE VENTA EN COP", width - 15, 286, { align: "right" });
 }
@@ -320,40 +327,38 @@ function drawProduct(pdf: jsPDF, product: PublicCatalogProduct, photos: PdfPhoto
   const cardWidth = 182;
   const cardHeight = 112;
   pdf.setFillColor(...colors.white);
-  pdf.roundedRect(left, top, cardWidth, cardHeight, 2.5, 2.5, "F");
-  pdf.setDrawColor(...colors.border);
-  pdf.setLineWidth(0.25);
-  pdf.roundedRect(left, top, cardWidth, cardHeight, 2.5, 2.5, "S");
+  pdf.rect(left, top, cardWidth, cardHeight, "F");
   pdf.setFillColor(...accent);
-  pdf.roundedRect(left, top, 2.2, cardHeight, 1, 1, "F");
+  pdf.rect(left, top, cardWidth, 1.2, "F");
 
-  if (photos[0]?.data) drawPhoto(pdf, photos[0].data, left + 6, top + 7, 70, 98);
+  if (photos[0]?.data) {
+    drawPhoto(pdf, photos[0].data, left + 6, top + 7, 70, 98, photos[0].width, photos[0].height);
+  }
 
   const detailLeft = photos[0]?.data ? left + 82 : left + 8;
   const detailWidth = cardWidth - (photos[0]?.data ? 91 : 16);
   pdf.setTextColor(...accent);
-  pdf.setFont("CormorantGaramond", "italic");
-  pdf.setFontSize(10);
+  pdf.setFont("Jost", "bold");
+  pdf.setFontSize(8);
+  pdf.setCharSpace(1);
   pdf.text(
-    product.linea === "LYNPHEA DAILY" ? "LYNPHEA DAILY" : "LYNPHEA PRO",
+    product.linea === "LYNPHEA DAILY" ? "DAILY  /  LYNPHEA" : "PRO  /  LYNPHEA",
     detailLeft,
     top + 13,
   );
+  pdf.setCharSpace(0);
 
   pdf.setTextColor(...ink);
-  pdf.setFont("CormorantGaramond", "bolditalic");
-  pdf.setFontSize(19);
-  const wrappedTitle = pdf.splitTextToSize(product.nombre.toUpperCase(), detailWidth);
+  pdf.setFont("Jost", "bold");
+  pdf.setFontSize(20);
+  const wrappedTitle = pdf.splitTextToSize(product.nombre, detailWidth);
   const titleLines = (Array.isArray(wrappedTitle) ? wrappedTitle : [wrappedTitle]).slice(0, 2);
-  pdf.text(titleLines, detailLeft, top + 23, { lineHeightFactor: 1.05 });
+  pdf.text(titleLines, detailLeft, top + 24, { lineHeightFactor: 1.02 });
 
   const thumbnailPhotos = photos.slice(1).filter((photo) => photo.data !== null);
-  const thumbnailTop = top + 48;
+  const thumbnailTop = top + 49;
   const thumbnailGap = 3;
-  const thumbnailWidth =
-    thumbnailPhotos.length > 0
-      ? (detailWidth - thumbnailGap * (thumbnailPhotos.length - 1)) / thumbnailPhotos.length
-      : 0;
+  const thumbnailWidth = (detailWidth - thumbnailGap * 2) / 3;
   for (let index = 0; index < thumbnailPhotos.length; index += 1) {
     const photo = thumbnailPhotos[index];
     if (!photo?.data) continue;
@@ -364,6 +369,8 @@ function drawProduct(pdf: jsPDF, product: PublicCatalogProduct, photos: PdfPhoto
       thumbnailTop,
       thumbnailWidth,
       32,
+      photo.width,
+      photo.height,
     );
   }
 
@@ -372,12 +379,12 @@ function drawProduct(pdf: jsPDF, product: PublicCatalogProduct, photos: PdfPhoto
   pdf.setLineWidth(0.25);
   pdf.line(detailLeft, priceTop - 4, left + cardWidth - 7, priceTop - 4);
   pdf.setTextColor(...colors.muted);
-  pdf.setFont("CormorantGaramond", "italic");
-  pdf.setFontSize(10);
-  pdf.text("Precio de venta", detailLeft, priceTop + 3);
+  pdf.setFont("Jost", "normal");
+  pdf.setFontSize(9);
+  pdf.text("PRECIO DE VENTA", detailLeft, priceTop + 2);
   pdf.setTextColor(...accent);
-  pdf.setFont("CormorantGaramond", "bolditalic");
-  pdf.setFontSize(20);
+  pdf.setFont("Jost", "bold");
+  pdf.setFontSize(21);
   pdf.text(formatPrice(product.precio), left + cardWidth - 7, priceTop + 5, { align: "right" });
 }
 
@@ -400,16 +407,16 @@ export async function downloadPublicCatalogPdf(
     author: "LYNPHEA",
   });
 
-  onProgress({ percent: 12, message: "Cargando Cormorant Garamond…" });
+  onProgress({ percent: 12, message: "Cargando tipografías editoriales…" });
   await registerPdfFonts(pdf);
   onProgress({ percent: 18, message: "Tipografía editorial lista. Componiendo portada…" });
 
   const firstProduct = dailyProducts[0] ?? proProducts[0];
   const firstCover = firstProduct ? getProductPhotos(firstProduct)[0] : undefined;
-  let coverPhoto: string | null = null;
+  let coverPhoto: PhotoData | null = null;
   if (firstCover) {
     try {
-      coverPhoto = await fetchPhoto(firstCover.url, 1.6);
+      coverPhoto = await fetchPhoto(firstCover.url);
     } catch (error) {
       console.error("No se pudo cargar la imagen para la portada del catálogo:", error);
     }
