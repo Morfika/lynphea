@@ -3,6 +3,7 @@ import {
   ArrowRight,
   ChevronLeft,
   ChevronRight,
+  Download,
   GripVertical,
   ImagePlus,
   Instagram,
@@ -23,6 +24,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { money } from "@/lib/store";
+import { downloadPublicCatalogPdf } from "@/lib/catalog-pdf";
 import {
   deleteProductImage,
   fetchIndexCatalog,
@@ -59,6 +61,7 @@ export function CatalogoPage() {
   const [uploadingProductId, setUploadingProductId] = useState<string | null>(null);
   const [savingImage, setSavingImage] = useState(false);
   const [draggedImageId, setDraggedImageId] = useState<string | null>(null);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
   const imageInputRefs = useRef(new Map<string, HTMLInputElement>());
 
   const openProductGallery = (productId: string) => {
@@ -208,6 +211,27 @@ export function CatalogoPage() {
     }
   };
 
+  const handleDownloadCatalog = async () => {
+    setGeneratingPdf(true);
+    try {
+      const result = await downloadPublicCatalogPdf();
+      if (result.missingPhotos > 0) {
+        toast.warning(
+          `El PDF se descargó, pero quedaron ${result.missingPhotos} espacios de fotos vacíos porque faltan imágenes en algunos productos.`,
+        );
+      } else {
+        toast.success(`Catálogo descargado con ${result.productCount} productos.`);
+      }
+    } catch (error) {
+      console.error("No se pudo generar el catálogo en PDF:", error);
+      toast.error(
+        error instanceof Error ? error.message : "No se pudo generar el catálogo en PDF.",
+      );
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
+
   const totalPaginas = Math.max(1, Math.ceil(totalProductos / porPagina));
   const pro = linea === "LYNPHEA PRO";
   return (
@@ -297,17 +321,32 @@ export function CatalogoPage() {
             <p className="text-xs uppercase tracking-[0.25em] opacity-55">Selección LYNPHEA</p>
             <h2 className="mt-3 font-display text-4xl sm:text-5xl">Lo que te va a encantar</h2>
           </div>
-          <div className="flex w-full items-center gap-3 border-b border-current/20 pb-2 sm:w-64">
-            <Search className="h-4 w-4 opacity-50" />
-            <input
-              value={busqueda}
-              onChange={(event) => {
-                setBusqueda(event.target.value);
-                setPagina(1);
-              }}
-              placeholder="Buscar producto o SKU"
-              className="w-full bg-transparent text-sm outline-none placeholder:opacity-50"
-            />
+          <div className="flex w-full items-center gap-3 sm:w-auto">
+            <div className="flex min-w-0 flex-1 items-center gap-3 border-b border-current/20 pb-2 sm:w-64 sm:flex-none">
+              <Search className="h-4 w-4 shrink-0 opacity-50" />
+              <input
+                value={busqueda}
+                onChange={(event) => {
+                  setBusqueda(event.target.value);
+                  setPagina(1);
+                }}
+                placeholder="Buscar producto o SKU"
+                className="w-full min-w-0 bg-transparent text-sm outline-none placeholder:opacity-50"
+              />
+            </div>
+            {!isAuthenticated && catalogReady && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={generatingPdf || totalProductos === 0}
+                onClick={() => void handleDownloadCatalog()}
+                className="h-9 shrink-0 border-current/20 bg-transparent text-current hover:bg-current/5 hover:text-current"
+              >
+                <Download className="h-4 w-4" />
+                {generatingPdf ? "Preparando…" : "Descargar catálogo"}
+              </Button>
+            )}
           </div>
         </div>
         {catalogError ? (
