@@ -7,6 +7,7 @@ import {
   GripVertical,
   ImagePlus,
   Instagram,
+  LoaderCircle,
   MessageCircle,
   Search,
   ShoppingBag,
@@ -23,8 +24,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Progress } from "@/components/ui/progress";
 import { money } from "@/lib/store";
-import { downloadPublicCatalogPdf } from "@/lib/catalog-pdf";
+import { downloadPublicCatalogPdf, type CatalogPdfProgress } from "@/lib/catalog-pdf";
 import {
   deleteProductImage,
   fetchIndexCatalog,
@@ -62,6 +64,10 @@ export function CatalogoPage() {
   const [savingImage, setSavingImage] = useState(false);
   const [draggedImageId, setDraggedImageId] = useState<string | null>(null);
   const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [pdfProgress, setPdfProgress] = useState<CatalogPdfProgress>({
+    percent: 0,
+    message: "Preparando el catálogo…",
+  });
   const imageInputRefs = useRef(new Map<string, HTMLInputElement>());
 
   const openProductGallery = (productId: string) => {
@@ -213,11 +219,13 @@ export function CatalogoPage() {
 
   const handleDownloadCatalog = async () => {
     setGeneratingPdf(true);
+    setPdfProgress({ percent: 1, message: "Preparando el catálogo…" });
     try {
-      const result = await downloadPublicCatalogPdf();
+      await new Promise((resolve) => window.setTimeout(resolve, 100));
+      const result = await downloadPublicCatalogPdf(setPdfProgress);
       if (result.missingPhotos > 0) {
         toast.warning(
-          `El PDF se descargó, pero quedaron ${result.missingPhotos} espacios de fotos vacíos porque faltan imágenes en algunos productos.`,
+          `El PDF se descargó; no se pudieron cargar ${result.missingPhotos} imágenes.`,
         );
       } else {
         toast.success(`Catálogo descargado con ${result.productCount} productos.`);
@@ -736,6 +744,53 @@ export function CatalogoPage() {
               </div>
             );
           })()}
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={generatingPdf}
+        onOpenChange={(open) => {
+          if (open) setGeneratingPdf(true);
+        }}
+      >
+        <DialogContent
+          className="max-w-md border-[#eadbd7] bg-[#fbf8f6] p-8 text-[#30241e] shadow-2xl [&>button.absolute]:hidden sm:rounded-2xl"
+          onEscapeKeyDown={(event) => event.preventDefault()}
+          onPointerDownOutside={(event) => event.preventDefault()}
+        >
+          <div className="space-y-6">
+            <div className="flex items-start gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#ead1ce] text-[#8e515b]">
+                <LoaderCircle className="h-5 w-5 animate-spin" />
+              </div>
+              <div className="space-y-1">
+                <DialogTitle className="font-display text-2xl font-medium">
+                  Generando catálogo
+                </DialogTitle>
+                <DialogDescription className="text-sm leading-6 text-[#806f6c]">
+                  Estamos preparando las fotografías y diseñando cada página. Puede tardar un
+                  momento.
+                </DialogDescription>
+              </div>
+            </div>
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between gap-4 text-xs">
+                <span className="text-[#806f6c]" role="status" aria-live="polite">
+                  {pdfProgress.message}
+                </span>
+                <span className="font-medium tabular-nums text-[#8e515b]">
+                  {pdfProgress.percent}%
+                </span>
+              </div>
+              <Progress
+                value={pdfProgress.percent}
+                aria-label="Progreso de generación del catálogo"
+                className="h-2 bg-[#eadbd7]"
+              />
+            </div>
+            <p className="border-t border-[#eadbd7] pt-4 text-[11px] uppercase tracking-[0.16em] text-[#9a8580]">
+              LYNPHEA · Makeup & Beauty
+            </p>
+          </div>
         </DialogContent>
       </Dialog>
     </main>
